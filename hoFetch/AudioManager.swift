@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import Combine
+import SwiftData
 
 final class AudioManager: NSObject, ObservableObject {
     @Published var isRecording = false
@@ -12,6 +13,7 @@ final class AudioManager: NSObject, ObservableObject {
     private let audioSession = AVAudioSession.sharedInstance()
     private var recorder: AVAudioRecorder?
     private let engine = AVAudioEngine()
+    private var modelContext: ModelContext?
 
     private let sampleRate: Double = 44100
 
@@ -19,6 +21,11 @@ final class AudioManager: NSObject, ObservableObject {
         super.init()
         NotificationCenter.default.addObserver(self, selector: #selector(handleInterruption(_:)), name: AVAudioSession.interruptionNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(handleRouteChange(_:)), name: AVAudioSession.routeChangeNotification, object: nil)
+    }
+    
+    func setModelContext(_ context: ModelContext) {
+        self.modelContext = context
+        loadSettings()
     }
 
     func requestPermission(completion: ((Bool) -> Void)? = nil) {
@@ -59,6 +66,7 @@ final class AudioManager: NSObject, ObservableObject {
                 if self.recorder?.record() == true {
                     self.isRecording = true
                     self.lastFileURL = url
+                    self.saveRecording(url: url, filename: url.lastPathComponent)
                 } else {
                     self.errorMessage = "録音開始に失敗しました。"
                 }
@@ -133,6 +141,7 @@ final class AudioManager: NSObject, ObservableObject {
         } else {
             startMonitoring()
         }
+        saveSettings()
     }
 
     private func newRecordingURL() -> URL {
@@ -171,6 +180,35 @@ final class AudioManager: NSObject, ObservableObject {
                 stopMonitoring()
             }
         }
+    }
+    
+    private func saveRecording(url: URL, filename: String) {
+        guard let context = modelContext else { return }
+        let recording = Recording(filename: filename, fileURL: url)
+        context.insert(recording)
+        try? context.save()
+    }
+    
+    private func loadSettings() {
+        guard let context = modelContext else { return }
+        let descriptor = FetchDescriptor<AppSettings>()
+        if let settings = try? context.fetch(descriptor).first {
+            DispatchQueue.main.async {
+                self.isMonitoring = settings.isMonitoringEnabled
+            }
+        }
+    }
+    
+    private func saveSettings() {
+        guard let context = modelContext else { return }
+        let descriptor = FetchDescriptor<AppSettings>()
+        let settings = (try? context.fetch(descriptor).first) ?? AppSettings()
+        settings.isMonitoringEnabled = isMonitoring
+        settings.lastUpdated = Date()
+        if !context.registeredModels.contains(where: { $0 === settings }) {
+            context.insert(settings)
+        }
+        try? context.save()
     }
 }
 

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct hoFetchApp: App {
@@ -13,5 +14,6 @@ struct hoFetchApp: App {
         WindowGroup {
             ContentView()
         }
+        .modelContainer(for: [Recording.self, AppSettings.self])
     }
 }

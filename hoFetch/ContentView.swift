@@ -1,6 +1,8 @@
 import SwiftUI
+import SwiftData
 
 struct ContentView: View {
+    @Environment(\.modelContext) private var modelContext
     @StateObject private var audio = AudioManager()
 
     var body: some View {
@@ -42,6 +44,7 @@ struct ContentView: View {
         }
         .padding()
         .onAppear {
+            audio.setModelContext(modelContext)
             audio.requestPermission()
         }
     }
