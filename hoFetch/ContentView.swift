@@ -38,15 +38,56 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
+            List {
+                ForEach(audio.recordings, id: \.self) { url in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(url.lastPathComponent)
+                                .lineLimit(1)
+                            if audio.currentPlayingURL == url {
+                                let current = audio.playbackCurrentTime
+                                let duration = max(audio.playbackDuration, 0.001)
+                                let progress = current / duration
+                                ProgressView(value: progress)
+                                    .frame(maxWidth: 160)
+                                Text("\(formatTime(current)) / \(formatTime(duration))")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer()
+                        Button(action: {
+                            audio.togglePlay(url)
+                        }) {
+                            Image(systemName: (audio.currentPlayingURL == url && audio.isPlaying) ? "pause.circle.fill" : "play.circle.fill")
+                                .font(.title2)
+                        }
+                    }
+                }
+                .onDelete { indexSet in
+                    indexSet.map { audio.recordings[$0] }.forEach { url in
+                        audio.deleteRecording(at: url)
+                    }
+                }
+            }
+
             Spacer()
         }
         .padding()
         .onAppear {
             audio.requestPermission()
+            audio.reloadRecordings()
         }
     }
 }
-
+ 
+private func formatTime(_ t: TimeInterval) -> String {
+    let total = Int(t.rounded())
+    let m = total / 60
+    let s = total % 60
+    return String(format: "%d:%02d", m, s)
+}
+ 
 #Preview {
     ContentView()
 }

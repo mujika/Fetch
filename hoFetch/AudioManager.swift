@@ -8,10 +8,19 @@ final class AudioManager: NSObject, ObservableObject {
     @Published var lastFileURL: URL?
     @Published var errorMessage: String?
     @Published var permissionGranted = false
+    @Published var recordings: [URL] = []
+    @Published var isPlaying = false
+    @Published var currentPlayingURL: URL?
+
+    @Published var playbackCurrentTime: TimeInterval = 0
+    @Published var playbackDuration: TimeInterval = 0
 
     private let audioSession = AVAudioSession.sharedInstance()
     private var recorder: AVAudioRecorder?
     private let engine = AVAudioEngine()
+    private var player: AVAudioPlayer?
+    private var playbackTimer: Timer?
+
 
     private let sampleRate: Double = 44100
 
@@ -19,6 +28,7 @@ final class AudioManager: NSObject, ObservableObject {
         super.init()
         NotificationCenter.default.addObserver(self, selector: #selector(handleInterruption(_:)), name: AVAudioSession.interruptionNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(handleRouteChange(_:)), name: AVAudioSession.routeChangeNotification, object: nil)
+        reloadRecordings()
     }
 
     func requestPermission(completion: ((Bool) -> Void)? = nil) {
@@ -34,6 +44,81 @@ final class AudioManager: NSObject, ObservableObject {
         try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
         try audioSession.setActive(true, options: [])
     }
+    func reloadRecordings() {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let urls = (try? FileManager.default.contentsOfDirectory(at: docs, includingPropertiesForKeys: [.creationDateKey], options: [.skipsHiddenFiles])) ?? []
+        let audio = urls.filter { $0.pathExtension.lowercased() == "m4a" }
+        let sorted = audio.sorted { lhs, rhs in
+            let l = (try? lhs.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date.distantPast
+            let r = (try? rhs.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? Date.distantPast
+            return l > r
+        }
+        recordings = sorted
+    }
+
+    private func startPlaybackTimer() {
+        playbackTimer?.invalidate()
+        playbackTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+            guard let self = self, let player = self.player else { return }
+            self.playbackCurrentTime = player.currentTime
+            self.playbackDuration = player.duration
+        }
+        RunLoop.main.add(playbackTimer!, forMode: .common)
+    }
+
+    private func stopPlaybackTimer() {
+        playbackTimer?.invalidate()
+        playbackTimer = nil
+        playbackCurrentTime = 0
+        playbackDuration = 0
+    }
+
+    func play(_ url: URL) {
+        do {
+            try configureSessionActive()
+            if currentPlayingURL == url, isPlaying {
+                stopPlayback()
+                return
+            }
+            stopPlayback()
+            player = try AVAudioPlayer(contentsOf: url)
+            player?.delegate = self
+            player?.prepareToPlay()
+            player?.play()
+            isPlaying = true
+            currentPlayingURL = url
+            playbackDuration = player?.duration ?? 0
+            startPlaybackTimer()
+        } catch {
+            errorMessage = "再生エラー: \(error.localizedDescription)"
+        }
+    }
+
+    func stopPlayback() {
+        player?.stop()
+        player = nil
+        isPlaying = false
+        currentPlayingURL = nil
+        stopPlaybackTimer()
+        deactivateSessionIfIdle()
+    }
+
+    func togglePlay(_ url: URL) {
+        if currentPlayingURL == url, isPlaying {
+            stopPlayback()
+        } else {
+            play(url)
+        }
+    }
+
+    func deleteRecording(at url: URL) {
+        if currentPlayingURL == url {
+            stopPlayback()
+        }
+        try? FileManager.default.removeItem(at: url)
+        reloadRecordings()
+    }
+
 
     private func deactivateSessionIfIdle() {
         if !isRecording && !isMonitoring {
@@ -59,6 +144,7 @@ final class AudioManager: NSObject, ObservableObject {
                 if self.recorder?.record() == true {
                     self.isRecording = true
                     self.lastFileURL = url
+                    self.reloadRecordings()
                 } else {
                     self.errorMessage = "録音開始に失敗しました。"
                 }
@@ -84,6 +170,7 @@ final class AudioManager: NSObject, ObservableObject {
         recorder?.stop()
         recorder = nil
         isRecording = false
+        reloadRecordings()
         deactivateSessionIfIdle()
     }
 
@@ -179,5 +266,18 @@ extension AudioManager: AVAudioRecorderDelegate {
         DispatchQueue.main.async { [weak self] in
             self?.errorMessage = "エンコードエラー: \(error?.localizedDescription ?? "不明")"
         }
+    }
+}
+
+extension AudioManager: AVAudioPlayerDelegate {
+    func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+        errorMessage = "デコードエラー: \(error?.localizedDescription ?? "不明")"
+    }
+
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        isPlaying = false
+        currentPlayingURL = nil
+        stopPlaybackTimer()
+        deactivateSessionIfIdle()
     }
 }
