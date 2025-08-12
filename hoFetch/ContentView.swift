@@ -1,6 +1,8 @@
 import SwiftUI
+import SwiftData
 
 struct ContentView: View {
+    @Environment(\.modelContext) private var modelContext
     @StateObject private var audio = AudioManager()
     @State private var demoDuration: Double = 120
     @State private var demoCurrentTime: Double = 0
@@ -71,6 +73,7 @@ struct ContentView: View {
         }
         .padding()
         .onAppear {
+            audio.setModelContext(modelContext)
             audio.requestPermission()
         }
     }
