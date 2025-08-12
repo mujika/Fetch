@@ -4,7 +4,7 @@ struct ContentView: View {
     @StateObject private var audio = AudioManager()
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 20) {
             Text("hoFetch 音声録音＋リアルタイム出力")
                 .font(.headline)
 
