@@ -6,7 +6,7 @@ struct ContentView: View {
     @State private var demoCurrentTime: Double = 0
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 20) {
             Text("hoFetch 音声録音＋リアルタイム出力")
                 .font(.headline)
 
