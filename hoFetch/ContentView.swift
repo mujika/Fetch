@@ -2,6 +2,8 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var audio = AudioManager()
+    @State private var demoDuration: Double = 120
+    @State private var demoCurrentTime: Double = 0
 
     var body: some View {
         VStack(spacing: 16) {
@@ -37,6 +39,33 @@ struct ContentView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(spacing: 8) {
+                Text("Wheel Scrubber デモ")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                WheelScrubberView(
+                    duration: demoDuration,
+                    currentTime: $demoCurrentTime,
+                    secondsPerTurn: 12
+                ) { target in
+                    demoCurrentTime = target
+                }
+                .frame(height: 220)
+                HStack {
+                    Button("−10s") {
+                        let t = WheelScrubberMath.clampTime(current: demoCurrentTime, delta: -10, duration: demoDuration)
+                        demoCurrentTime = t
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button("+10s") {
+                        let t = WheelScrubberMath.clampTime(current: demoCurrentTime, delta: 10, duration: demoDuration)
+                        demoCurrentTime = t
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
 
             Spacer()
         }
